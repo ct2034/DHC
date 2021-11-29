@@ -1,11 +1,13 @@
 import random
 from typing import List, Union
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 plt.ion()
 from matplotlib import colors
-import configs
 
+from . import configs
 
 action_list = np.array([[0, 0],[-1, 0],[1, 0],[0, -1],[0, 1]], dtype=np.int)
 

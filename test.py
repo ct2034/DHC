@@ -1,16 +1,20 @@
 '''create test set and test model'''
-import random
-import pickle
 import multiprocessing as mp
-from typing import Union
-from tqdm import tqdm
+import os
+import pickle
+import random
+from typing import Optional, Union
+
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from environment import Environment
-from model import Network
-import configs
+from tqdm import tqdm
+
+from . import configs, environment, model
+
+Network = model.Network
+Environment = environment.Environment
 
 torch.manual_seed(configs.test_seed)
 np.random.seed(configs.test_seed)
@@ -19,19 +23,24 @@ test_num = 200
 device = torch.device('cpu')
 torch.set_num_threads(1)
 
+
 def create_test(test_env_settings, num_test_cases):
 
     for map_length, num_agents, density in test_env_settings:
 
-        name = './test_set/{}length_{}agents_{}density.pth'.format(map_length, num_agents, density)
-        print('-----{}length {}agents {}density-----'.format(map_length, num_agents, density))
+        name = './test_set/{}length_{}agents_{}density.pth'.format(
+            map_length, num_agents, density)
+        print('-----{}length {}agents {}density-----'.format(map_length,
+                                                             num_agents, density))
 
         tests = []
 
-        env = Environment(fix_density=density, num_agents=num_agents, map_length=map_length)
+        env = Environment(fix_density=density,
+                          num_agents=num_agents, map_length=map_length)
 
         for _ in tqdm(range(num_test_cases)):
-            tests.append((np.copy(env.map), np.copy(env.agents_pos), np.copy(env.goals_pos)))
+            tests.append((np.copy(env.map), np.copy(
+                env.agents_pos), np.copy(env.goals_pos)))
             env.reset(num_agents=num_agents, map_length=map_length)
         print()
 
@@ -64,7 +73,7 @@ def create_test(test_env_settings, num_test_cases):
 #         start = time.time()
 #         for i in range(test_num):
 #             env.load(tests[i][0], tests[i][1], tests[i][2])
-            
+
 #             done = False
 #             network.reset()
 
@@ -87,7 +96,7 @@ def create_test(test_env_settings, num_test_cases):
 
 #             if i == case and show:
 #                 env.close(True)
-        
+
 #         f_rate = (test_num-fail)/test_num
 #         mean_steps = sum(steps)/test_num
 #         duration = time.time()-start
@@ -100,9 +109,9 @@ def create_test(test_env_settings, num_test_cases):
 #         model_name -= configs.save_interval
 
 
-def test_model(model_range: Union[int, tuple]):
+def test_model(model_range: Union[int, tuple], scenario_fname: Optional[str] = None):
     '''
-    test model in 'models' file with model number 
+    test model in 'models' file with model number
     '''
     network = Network()
     network.eval()
@@ -113,16 +122,19 @@ def test_model(model_range: Union[int, tuple]):
     pool = mp.Pool(mp.cpu_count())
 
     if isinstance(model_range, int):
-        state_dict = torch.load('./models/{}.pth'.format(model_range), map_location=device)
+        state_dict = torch.load(
+            os.path.dirname(__file__) + '/models/{}.pth'.format(model_range), map_location=device)
         network.load_state_dict(state_dict)
         network.eval()
         network.share_memory()
 
         print('----------test model {}----------'.format(model_range))
 
-        for case in test_set:
-            print("test set: {} length {} agents {} density".format(case[0], case[1], case[2]))
-            with open('./test_set/{}length_{}agents_{}density.pth'.format(case[0], case[1], case[2]), 'rb') as f:
+        if scenario_fname is not None:
+            # for case in test_set:
+            # print("test set: {} length {} agents {} density".format(
+            #     case[0], case[1], case[2]))
+            with open(scenario_fname, 'rb') as f:
                 tests = pickle.load(f)
 
             tests = [(test, network) for test in tests]
@@ -137,10 +149,12 @@ def test_model(model_range: Union[int, tuple]):
             print("success rate: {:.2f}%".format(success/len(ret)*100))
             print("average step: {}".format(avg_step/len(ret)))
             print()
+        return ret
 
     elif isinstance(model_range, tuple):
         for model_name in range(model_range[0], model_range[1]+1, configs.save_interval):
-            state_dict = torch.load('./models/{}.pth'.format(model_name), map_location=device)
+            state_dict = torch.load(
+                './models/{}.pth'.format(model_name), map_location=device)
             network.load_state_dict(state_dict)
             network.eval()
             network.share_memory()
@@ -148,7 +162,8 @@ def test_model(model_range: Union[int, tuple]):
             print('----------test model {}----------'.format(model_name))
 
             for case in test_set:
-                print("test set: {} length {} agents {} density".format(case[0], case[1], case[2]))
+                print("test set: {} length {} agents {} density".format(
+                    case[0], case[1], case[2]))
                 with open('./test_set/{}length_{}agents_{}density.pth'.format(case[0], case[1], case[2]), 'rb') as f:
                     tests = pickle.load(f)
 
@@ -175,17 +190,19 @@ def test_one_case(args):
     env = Environment()
     env.load(env_set[0], env_set[1], env_set[2])
     obs, pos = env.observe()
-    
+
     done = False
     network.reset()
 
     step = 0
     while not done and env.steps < configs.max_episode_length:
-        actions, _, _, _ = network.step(torch.as_tensor(obs.astype(np.float32)), torch.as_tensor(pos.astype(np.float32)))
+        actions, _, _, _ = network.step(torch.as_tensor(
+            obs.astype(np.float32)), torch.as_tensor(pos.astype(np.float32)))
         (obs, pos), _, done, _ = env.step(actions)
         step += 1
 
     return np.array_equal(env.agents_pos, env.goals_pos), step
+
 
 def make_animation(model_name: int, test_set_name: tuple, test_case_idx: int, steps: int = 25):
     '''
@@ -196,15 +213,16 @@ def make_animation(model_name: int, test_set_name: tuple, test_case_idx: int, st
     steps: how many steps to visualize in test case
     '''
     color_map = np.array([[255, 255, 255],   # white
-                    [190, 190, 190],   # gray
-                    [0, 191, 255],   # blue
-                    [255, 165, 0],   # orange
-                    [0, 250, 154]])  # green
+                          [190, 190, 190],   # gray
+                          [0, 191, 255],   # blue
+                          [255, 165, 0],   # orange
+                          [0, 250, 154]])  # green
 
     network = Network()
     network.eval()
     network.to(device)
-    state_dict = torch.load('models/{}.pth'.format(model_name), map_location=device)
+    state_dict = torch.load(
+        'models/{}.pth'.format(model_name), map_location=device)
     network.load_state_dict(state_dict)
 
     test_name = 'test_set/40_length_16_agents_0.3_density.pkl'
@@ -212,10 +230,11 @@ def make_animation(model_name: int, test_set_name: tuple, test_case_idx: int, st
         tests = pickle.load(f)
 
     env = Environment()
-    env.load(tests[test_case_idx][0], tests[test_case_idx][1], tests[test_case_idx][2])
+    env.load(tests[test_case_idx][0], tests[test_case_idx]
+             [1], tests[test_case_idx][2])
 
     fig = plt.figure()
-            
+
     done = False
     obs, pos = env.observe()
 
@@ -236,13 +255,15 @@ def make_animation(model_name: int, test_set_name: tuple, test_case_idx: int, st
         imgs[-1].append(img)
 
         for i, ((agent_x, agent_y), (goal_x, goal_y)) in enumerate(zip(env.agents_pos, env.goals_pos)):
-            text = plt.text(agent_y, agent_x, i, color='black', ha='center', va='center')
+            text = plt.text(agent_y, agent_x, i, color='black',
+                            ha='center', va='center')
             imgs[-1].append(text)
-            text = plt.text(goal_y, goal_x, i, color='black', ha='center', va='center')
+            text = plt.text(goal_y, goal_x, i, color='black',
+                            ha='center', va='center')
             imgs[-1].append(text)
 
-
-        actions, _, _, _ = network.step(torch.from_numpy(obs.astype(np.float32)).to(device), torch.from_numpy(pos.astype(np.float32)).to(device))
+        actions, _, _, _ = network.step(torch.from_numpy(obs.astype(np.float32)).to(
+            device), torch.from_numpy(pos.astype(np.float32)).to(device))
         (obs, pos), _, done, _ = env.step(actions)
         # print(done)
 
@@ -261,18 +282,23 @@ def make_animation(model_name: int, test_set_name: tuple, test_case_idx: int, st
             imgs.append([])
             imgs[-1].append(img)
             for i, ((agent_x, agent_y), (goal_x, goal_y)) in enumerate(zip(env.agents_pos, env.goals_pos)):
-                text = plt.text(agent_y, agent_x, i, color='black', ha='center', va='center')
+                text = plt.text(agent_y, agent_x, i,
+                                color='black', ha='center', va='center')
                 imgs[-1].append(text)
-                text = plt.text(goal_y, goal_x, i, color='black', ha='center', va='center')
+                text = plt.text(goal_y, goal_x, i, color='black',
+                                ha='center', va='center')
                 imgs[-1].append(text)
 
-
-    ani = animation.ArtistAnimation(fig, imgs, interval=600, blit=True, repeat_delay=1000)
+    ani = animation.ArtistAnimation(
+        fig, imgs, interval=600, blit=True, repeat_delay=1000)
 
     ani.save('videos/{}_{}_{}_{}.mp4'.format(model_name, *test_set_name))
 
 
 if __name__ == '__main__':
 
-    create_test(test_env_settings=configs.test_env_settings, num_test_cases=configs.num_test_cases)
-    # test_model((2000, 6000))
+    # create_test(test_env_settings=configs.test_env_settings,
+    #             num_test_cases=configs.num_test_cases)
+    ret = test_model(
+        337500, "./test_set/tracing_pathes_in_the_dark_10_0.5_5.pth")
+    print(ret)
