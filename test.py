@@ -130,6 +130,7 @@ def test_model(model_range: Union[int, tuple], scenario_fname: Optional[str] = N
 
         print('----------test model {}----------'.format(model_range))
 
+        ret = None
         if scenario_fname is not None:
             # for case in test_set:
             # print("test set: {} length {} agents {} density".format(
@@ -142,7 +143,7 @@ def test_model(model_range: Union[int, tuple], scenario_fname: Optional[str] = N
 
             success = 0
             avg_step = 0
-            for i, j in ret:
+            for i, j, k in ret:
                 success += i
                 avg_step += j
 
@@ -195,13 +196,18 @@ def test_one_case(args):
     network.reset()
 
     step = 0
+    paths = []
     while not done and env.steps < configs.max_episode_length:
+        paths.append(env.agents_pos)
         actions, _, _, _ = network.step(torch.as_tensor(
             obs.astype(np.float32)), torch.as_tensor(pos.astype(np.float32)))
         (obs, pos), _, done, _ = env.step(actions)
         step += 1
+    paths.append(env.agents_pos)
 
-    return np.array_equal(env.agents_pos, env.goals_pos), step
+    paths = np.array(paths).swapaxes(0, 1)
+
+    return np.array_equal(env.agents_pos, env.goals_pos), step, paths
 
 
 def make_animation(model_name: int, test_set_name: tuple, test_case_idx: int, steps: int = 25):
