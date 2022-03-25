@@ -139,17 +139,20 @@ def test_model(model_range: Union[int, tuple], scenario_fname: Optional[str] = N
                 tests = pickle.load(f)
 
             tests = [(test, network) for test in tests]
-            ret = pool.map(test_one_case, tests)
+            try:
+                ret = pool.map(test_one_case, tests)
 
-            success = 0
-            avg_step = 0
-            for i, j, k in ret:
-                success += i
-                avg_step += j
+                success = 0
+                avg_step = 0
+                for i, j, k in ret:
+                    success += i
+                    avg_step += j
 
-            print("success rate: {:.2f}%".format(success/len(ret)*100))
-            print("average step: {}".format(avg_step/len(ret)))
-            print()
+                print("success rate: {:.2f}%".format(success/len(ret)*100))
+                print("average step: {}".format(avg_step/len(ret)))
+                print()
+            except Exception as e:
+                ret = [None] * len(tests)
         return ret
 
     elif isinstance(model_range, tuple):
